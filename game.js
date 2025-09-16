@@ -32,6 +32,9 @@ let enemyBullets = [];
 // エイリアン配列
 let aliens = [];
 
+// エイリアンアニメーション用
+let alienAnimationFrame = 0;
+
 // エイリアンの設定
 const alienConfig = {
     rows: 5,
@@ -465,14 +468,87 @@ function drawStars() {
 
 // プレイヤー描画
 function drawPlayer() {
-    ctx.fillStyle = player.color;
-    ctx.fillRect(player.x, player.y, player.width, player.height);
+    const x = player.x;
+    const y = player.y;
     
-    // 宇宙船のディテール
+    // グロー効果
+    drawPlayerGlow(x, y);
+    
+    // 宇宙船のメイン構造を詳細に描画
+    drawPlayerShip(x, y);
+    
+    // エンジン炎のアニメーション
+    if (gameState.gameRunning) {
+        drawPlayerEngine(x, y);
+    }
+}
+
+// プレイヤーのグロー効果
+function drawPlayerGlow(x, y) {
+    ctx.shadowColor = '#00ffaa';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = '#00ffaa10'; // 透明度を追加
+    ctx.fillRect(x - 3, y - 3, player.width + 6, player.height + 6);
+    ctx.shadowBlur = 0;
+}
+
+// プレイヤーの宇宙船詳細描画
+function drawPlayerShip(x, y) {
+    // 船体のメインボディ（青緑色）
+    ctx.fillStyle = '#00ffaa';
+    ctx.fillRect(x + 20, y + 8, 10, 20);
+    
+    // 船首（先端部分）
+    ctx.fillStyle = '#00ff88';
+    ctx.fillRect(x + 22, y + 5, 6, 3);
+    ctx.fillRect(x + 24, y + 2, 2, 3);
+    
+    // 左右の翼
+    ctx.fillStyle = '#00cc77';
+    ctx.fillRect(x + 10, y + 15, 8, 8);
+    ctx.fillRect(x + 32, y + 15, 8, 8);
+    
+    // 翼のディテール
+    ctx.fillStyle = '#00ff99';
+    ctx.fillRect(x + 12, y + 17, 4, 4);
+    ctx.fillRect(x + 34, y + 17, 4, 4);
+    
+    // コックピット
+    ctx.fillStyle = '#88ffff';
+    ctx.fillRect(x + 22, y + 12, 6, 4);
+    
+    // 船体のライト
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(player.x + 20, player.y + 5, 10, 5);
-    ctx.fillRect(player.x + 15, player.y + 15, 5, 10);
-    ctx.fillRect(player.x + 30, player.y + 15, 5, 10);
+    ctx.fillRect(x + 19, y + 10, 1, 1);
+    ctx.fillRect(x + 30, y + 10, 1, 1);
+    
+    // 船体のライン
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + 21, y + 18, 8, 1);
+    
+    // 武器システム
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillRect(x + 18, y + 25, 2, 3);
+    ctx.fillRect(x + 30, y + 25, 2, 3);
+}
+
+// プレイヤーエンジン炎描画
+function drawPlayerEngine(x, y) {
+    const time = Date.now() * 0.01;
+    const flameHeight = 3 + Math.sin(time) * 2;
+    
+    // メインエンジン炎
+    ctx.fillStyle = '#ff6600';
+    ctx.fillRect(x + 23, y + 28, 4, flameHeight);
+    
+    // サイドエンジン炎
+    ctx.fillStyle = '#ff8800';
+    ctx.fillRect(x + 15, y + 26, 2, flameHeight * 0.7);
+    ctx.fillRect(x + 33, y + 26, 2, flameHeight * 0.7);
+    
+    // 炎の先端（より明るい色）
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillRect(x + 24, y + 28 + flameHeight - 1, 2, 1);
 }
 
 // 弾丸描画
@@ -498,22 +574,175 @@ function drawBullets() {
 
 // エイリアン描画
 function drawAliens() {
+    alienAnimationFrame += 0.1;
+    
     for (let alien of aliens) {
         if (!alien.alive) continue;
         
-        // タイプ別の色
-        const colors = ['#ff00ff', '#00ffff', '#ffff00', '#ff8800', '#ff0000'];
-        ctx.fillStyle = colors[alien.type] || '#ffffff';
+        drawAlienByType(alien, alienAnimationFrame);
         
-        // エイリアンの本体
-        ctx.fillRect(alien.x, alien.y, alien.width, alien.height);
-        
-        // エイリアンのディテール（簡単な顔）
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(alien.x + 5, alien.y + 5, 3, 3);
-        ctx.fillRect(alien.x + 22, alien.y + 5, 3, 3);
-        ctx.fillRect(alien.x + 12, alien.y + 12, 6, 2);
+        // グロー効果
+        drawAlienGlow(alien);
     }
+}
+
+// タイプ別エイリアン描画
+function drawAlienByType(alien, animFrame) {
+    const x = alien.x;
+    const y = alien.y;
+    const frame = Math.floor(animFrame) % 2; // アニメーションフレーム
+    
+    switch (alien.type) {
+        case 0: // 最上段 - 司令官型
+            drawCommanderAlien(x, y, frame);
+            break;
+        case 1: // 2段目 - 戦闘機型
+            drawFighterAlien(x, y, frame);
+            break;
+        case 2: // 3段目 - スカウト型
+            drawScoutAlien(x, y, frame);
+            break;
+        case 3: // 4段目 - ドローン型
+            drawDroneAlien(x, y, frame);
+            break;
+        case 4: // 最下段 - 基本型
+            drawBasicAlien(x, y, frame);
+            break;
+    }
+}
+
+// 司令官型エイリアン（最上段・最高得点）
+function drawCommanderAlien(x, y, frame) {
+    // メインボディ（紫色）
+    ctx.fillStyle = '#ff00ff';
+    ctx.fillRect(x + 8, y + 6, 14, 8);
+    
+    // 頭部
+    ctx.fillStyle = '#ff44ff';
+    ctx.fillRect(x + 10, y + 2, 10, 6);
+    
+    // 目（光る）
+    ctx.fillStyle = frame ? '#ffff00' : '#ff0000';
+    ctx.fillRect(x + 12, y + 4, 2, 2);
+    ctx.fillRect(x + 16, y + 4, 2, 2);
+    
+    // 触角
+    ctx.fillStyle = '#ff88ff';
+    ctx.fillRect(x + 9, y, 2, 3);
+    ctx.fillRect(x + 19, y, 2, 3);
+    
+    // 装甲プレート
+    ctx.fillStyle = '#aa00aa';
+    ctx.fillRect(x + 6, y + 8, 18, 4);
+    
+    // 武器システム
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillRect(x + 4, y + 10, 3, 6);
+    ctx.fillRect(x + 23, y + 10, 3, 6);
+}
+
+// 戦闘機型エイリアン（2段目）
+function drawFighterAlien(x, y, frame) {
+    // メインボディ（シアン）
+    ctx.fillStyle = '#00ffff';
+    ctx.fillRect(x + 9, y + 5, 12, 10);
+    
+    // 翼
+    ctx.fillStyle = '#00cccc';
+    ctx.fillRect(x + 5, y + 8, 6, 4);
+    ctx.fillRect(x + 19, y + 8, 6, 4);
+    
+    // コックピット
+    ctx.fillStyle = frame ? '#88ffff' : '#44ffff';
+    ctx.fillRect(x + 11, y + 7, 8, 6);
+    
+    // エンジン
+    ctx.fillStyle = '#ff6600';
+    ctx.fillRect(x + 7, y + 16, 2, 2);
+    ctx.fillRect(x + 21, y + 16, 2, 2);
+    
+    // レーザー砲
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(x + 13, y + 15, 4, 2);
+}
+
+// スカウト型エイリアン（3段目）
+function drawScoutAlien(x, y, frame) {
+    // メインボディ（黄色）
+    ctx.fillStyle = '#ffff00';
+    ctx.fillRect(x + 10, y + 4, 10, 12);
+    
+    // スキャナー（点滅）
+    ctx.fillStyle = frame ? '#ff0000' : '#00ff00';
+    ctx.fillRect(x + 14, y + 2, 2, 4);
+    
+    // サイドパネル
+    ctx.fillStyle = '#cccc00';
+    ctx.fillRect(x + 8, y + 7, 4, 6);
+    ctx.fillRect(x + 18, y + 7, 4, 6);
+    
+    // センサーアレイ
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + 12, y + 9, 1, 1);
+    ctx.fillRect(x + 17, y + 9, 1, 1);
+    ctx.fillRect(x + 15, y + 11, 1, 1);
+}
+
+// ドローン型エイリアン（4段目）
+function drawDroneAlien(x, y, frame) {
+    // メインボディ（オレンジ）
+    ctx.fillStyle = '#ff8800';
+    ctx.fillRect(x + 11, y + 6, 8, 8);
+    
+    // プロペラ部分（回転アニメーション）
+    ctx.fillStyle = frame ? '#ffaa44' : '#ff6600';
+    ctx.fillRect(x + 8, y + 8, 4, 4);
+    ctx.fillRect(x + 18, y + 8, 4, 4);
+    
+    // 中央コア
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + 14, y + 9, 2, 2);
+    
+    // エネルギーコア（点滅）
+    ctx.fillStyle = frame ? '#00ff00' : '#0088ff';
+    ctx.fillRect(x + 13, y + 4, 4, 2);
+}
+
+// 基本型エイリアン（最下段）
+function drawBasicAlien(x, y, frame) {
+    // メインボディ（赤）
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(x + 9, y + 7, 12, 6);
+    
+    // 頭部
+    ctx.fillStyle = '#ff4444';
+    ctx.fillRect(x + 11, y + 4, 8, 5);
+    
+    // 目（まばたきアニメーション）
+    ctx.fillStyle = frame ? '#000000' : '#ffff00';
+    ctx.fillRect(x + 13, y + 6, 2, 2);
+    ctx.fillRect(x + 17, y + 6, 2, 2);
+    
+    // 口
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + 14, y + 11, 4, 1);
+    
+    // 脚
+    ctx.fillStyle = '#aa0000';
+    ctx.fillRect(x + 10, y + 13, 2, 4);
+    ctx.fillRect(x + 18, y + 13, 2, 4);
+}
+
+// エイリアンのグロー効果
+function drawAlienGlow(alien) {
+    const colors = ['#ff00ff', '#00ffff', '#ffff00', '#ff8800', '#ff0000'];
+    const glowColor = colors[alien.type];
+    
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = 3;
+    ctx.fillStyle = glowColor + '20'; // 透明度を追加
+    ctx.fillRect(alien.x - 2, alien.y - 2, alien.width + 4, alien.height + 4);
+    ctx.shadowBlur = 0;
 }
 
 // 防壁描画
