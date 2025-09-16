@@ -47,6 +47,19 @@ const alienConfig = {
 // パーティクル効果用
 let particles = [];
 
+// 防壁システム
+let barriers = [];
+
+// 防壁の設定
+const barrierConfig = {
+    count: 4,
+    width: 80,
+    height: 60,
+    blockSize: 4,
+    y: canvas.height - 200,
+    spacing: 160
+};
+
 // ゲーム初期化
 function initGame() {
     gameState.score = 0;
@@ -56,11 +69,13 @@ function initGame() {
     enemyBullets = [];
     aliens = [];
     particles = [];
+    barriers = [];
     
     player.x = canvas.width / 2 - 25;
     player.y = canvas.height - 60;
     
     createAliens();
+    createBarriers();
     updateUI();
     gameOverScreen.style.display = 'none';
 }
@@ -79,6 +94,36 @@ function createAliens() {
                 lastShot: 0
             });
         }
+    }
+}
+
+// 防壁を生成
+function createBarriers() {
+    barriers = [];
+    
+    for (let i = 0; i < barrierConfig.count; i++) {
+        const barrier = {
+            x: 100 + i * barrierConfig.spacing,
+            y: barrierConfig.y,
+            width: barrierConfig.width,
+            height: barrierConfig.height,
+            blocks: []
+        };
+        
+        // 防壁のブロックを初期化し、道路を作る
+        const blocksX = Math.floor(barrier.width / barrierConfig.blockSize);
+        const blocksY = Math.floor(barrier.height / barrierConfig.blockSize);
+        
+        for (let y = 0; y < blocksY; y++) {
+            barrier.blocks[y] = [];
+            for (let x = 0; x < blocksX; x++) {
+                // 下部中央に道路を作る（プレイヤーが通れるように）
+                const isBottomCenter = y >= blocksY - 4 && x >= blocksX * 0.3 && x <= blocksX * 0.7;
+                barrier.blocks[y][x] = !isBottomCenter;
+            }
+        }
+        
+        barriers.push(barrier);
     }
 }
 
@@ -259,13 +304,98 @@ function checkCollisions() {
         }
     }
     
+    // 防壁との当たり判定
+    checkBarrierCollisions();
+    
     // 全てのエイリアンを倒したかチェック
     if (aliens.every(alien => !alien.alive)) {
         // 新しいウェーブを開始
         setTimeout(() => {
             createAliens();
+            createBarriers(); // 防壁も復活
             alienConfig.speed += 0.5; // 難易度を上げる
         }, 1000);
+    }
+}
+
+// 防壁との当たり判定
+function checkBarrierCollisions() {
+    // プレイヤーの弾丸と防壁
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const bullet = bullets[i];
+        
+        for (let barrier of barriers) {
+            if (checkBulletBarrierCollision(bullet, barrier)) {
+                damageBarrier(barrier, bullet.x, bullet.y, 2);
+                bullets.splice(i, 1);
+                break;
+            }
+        }
+    }
+    
+    // 敵の弾丸と防壁
+    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+        const bullet = enemyBullets[i];
+        
+        for (let barrier of barriers) {
+            if (checkBulletBarrierCollision(bullet, barrier)) {
+                damageBarrier(barrier, bullet.x, bullet.y, 2);
+                enemyBullets.splice(i, 1);
+                break;
+            }
+        }
+    }
+}
+
+// 弾丸と防壁の当たり判定
+function checkBulletBarrierCollision(bullet, barrier) {
+    return bullet.x < barrier.x + barrier.width &&
+           bullet.x + bullet.width > barrier.x &&
+           bullet.y < barrier.y + barrier.height &&
+           bullet.y + bullet.height > barrier.y;
+}
+
+// 防壁へのダメージ処理
+function damageBarrier(barrier, hitX, hitY, damageRadius) {
+    const localX = hitX - barrier.x;
+    const localY = hitY - barrier.y;
+    
+    const blockX = Math.floor(localX / barrierConfig.blockSize);
+    const blockY = Math.floor(localY / barrierConfig.blockSize);
+    
+    // ダメージ範囲内のブロックを破壊
+    for (let dy = -damageRadius; dy <= damageRadius; dy++) {
+        for (let dx = -damageRadius; dx <= damageRadius; dx++) {
+            const targetX = blockX + dx;
+            const targetY = blockY + dy;
+            
+            if (targetY >= 0 && targetY < barrier.blocks.length &&
+                targetX >= 0 && targetX < barrier.blocks[targetY].length) {
+                
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance <= damageRadius) {
+                    barrier.blocks[targetY][targetX] = false;
+                }
+            }
+        }
+    }
+    
+    // 小さな爆発エフェクト
+    createSmallExplosion(hitX, hitY);
+}
+
+// 小さな爆発エフェクト
+function createSmallExplosion(x, y) {
+    for (let i = 0; i < 4; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 4,
+            vy: (Math.random() - 0.5) * 4,
+            life: 15,
+            maxLife: 15,
+            color: `hsl(${Math.random() * 40 + 20}, 80%, 60%)`
+        });
     }
 }
 
@@ -315,6 +445,9 @@ function draw() {
     
     // エイリアン描画
     drawAliens();
+    
+    // 防壁描画
+    drawBarriers();
     
     // パーティクル描画
     drawParticles();
@@ -380,6 +513,33 @@ function drawAliens() {
         ctx.fillRect(alien.x + 5, alien.y + 5, 3, 3);
         ctx.fillRect(alien.x + 22, alien.y + 5, 3, 3);
         ctx.fillRect(alien.x + 12, alien.y + 12, 6, 2);
+    }
+}
+
+// 防壁描画
+function drawBarriers() {
+    for (let barrier of barriers) {
+        for (let y = 0; y < barrier.blocks.length; y++) {
+            for (let x = 0; x < barrier.blocks[y].length; x++) {
+                if (barrier.blocks[y][x]) {
+                    const blockX = barrier.x + x * barrierConfig.blockSize;
+                    const blockY = barrier.y + y * barrierConfig.blockSize;
+                    
+                    // グラデーション効果で防壁を描画
+                    const gradient = ctx.createLinearGradient(blockX, blockY, blockX, blockY + barrierConfig.blockSize);
+                    gradient.addColorStop(0, '#00ff88');
+                    gradient.addColorStop(1, '#00aa55');
+                    
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(blockX, blockY, barrierConfig.blockSize, barrierConfig.blockSize);
+                    
+                    // ボーダー効果
+                    ctx.strokeStyle = '#00cc66';
+                    ctx.lineWidth = 0.5;
+                    ctx.strokeRect(blockX, blockY, barrierConfig.blockSize, barrierConfig.blockSize);
+                }
+            }
+        }
     }
 }
 
