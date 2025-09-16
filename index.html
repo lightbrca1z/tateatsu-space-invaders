@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スペースインベーダー</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(to bottom, #000428, #004e92);
+            font-family: 'Courier New', monospace;
+            color: white;
+        }
+
+        .game-container {
+            text-align: center;
+            position: relative;
+        }
+
+        canvas {
+            border: 2px solid #00ff00;
+            background: #000;
+            border-radius: 5px;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+        }
+
+        .ui {
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 800px;
+        }
+
+        .score {
+            font-size: 24px;
+            color: #00ff00;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+        }
+
+        .lives {
+            font-size: 20px;
+            color: #ff4444;
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border: 2px solid #00ff00;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+
+        .game-over h2 {
+            color: #ff4444;
+            margin-top: 0;
+            text-shadow: 0 0 10px rgba(255, 68, 68, 0.8);
+        }
+
+        .restart-btn {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-family: inherit;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 15px;
+            transition: all 0.3s;
+        }
+
+        .restart-btn:hover {
+            background: #00cc00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+        }
+
+        .controls {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        .title {
+            font-size: 32px;
+            color: #00ff00;
+            text-shadow: 0 0 15px rgba(0, 255, 0, 0.8);
+            margin-bottom: 20px;
+            letter-spacing: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1 class="title">SPACE INVADERS</h1>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div class="ui">
+            <div class="score">Score: <span id="scoreValue">0</span></div>
+            <div class="lives">Lives: <span id="livesValue">3</span></div>
+        </div>
+        
+        <div class="controls">
+            A/D または ← → で移動 | SPACE で射撃
+        </div>
+
+        <div class="game-over" id="gameOverScreen">
+            <h2>GAME OVER</h2>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <button class="restart-btn" onclick="restartGame()">RESTART</button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
