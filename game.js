@@ -10,9 +10,14 @@ const finalScoreElement = document.getElementById('finalScore');
 let gameState = {
     score: 0,
     lives: 3,
+    level: 1, // 常に1から開始
     gameRunning: true,
     keys: {},
-    lastTime: 0
+    lastTime: 0,
+    aliensKilled: 0,
+    totalAliensInLevel: 0,
+    levelStartTime: 0,
+    levelCompleting: false // レベルクリア処理中フラグを追加
 };
 
 // プレイヤー
@@ -21,7 +26,7 @@ const player = {
     y: canvas.height - 60,
     width: 50,
     height: 30,
-    speed: 5,
+    speed: 3,
     color: '#00ff00'
 };
 
@@ -37,14 +42,15 @@ let alienAnimationFrame = 0;
 
 // エイリアンの設定
 const alienConfig = {
-    rows: 5,
-    cols: 10,
+    rows: 2,
+    cols: 4,
     width: 30,
     height: 20,
     spacing: 40,
-    speed: 1,
+    speed: 0.3,
     direction: 1,
-    dropDistance: 20
+    dropDistance: 12,
+    shootChance: 0.0001
 };
 
 // パーティクル効果用
@@ -65,9 +71,19 @@ const barrierConfig = {
 
 // ゲーム初期化
 function initGame() {
+    console.log('=== GAME INITIALIZATION ===');
+    
+    // 基本状態をリセット
     gameState.score = 0;
     gameState.lives = 3;
+    gameState.level = 1; // 必ず1から開始
     gameState.gameRunning = true;
+    gameState.aliensKilled = 0;
+    gameState.levelStartTime = Date.now();
+    gameState.levelCompleting = false; // フラグをリセット
+    
+    console.log(`Game initialized - Level: ${gameState.level}`);
+    
     bullets = [];
     enemyBullets = [];
     aliens = [];
@@ -76,11 +92,69 @@ function initGame() {
     
     player.x = canvas.width / 2 - 25;
     player.y = canvas.height - 60;
+    player.speed = 3;
     
+    // レベル1用の設定
+    setLevelDifficulty(1);
     createAliens();
     createBarriers();
     updateUI();
     gameOverScreen.style.display = 'none';
+}
+
+// レベル別難易度設定
+function setLevelDifficulty(level) {
+    console.log(`=== SET LEVEL DIFFICULTY ===`);
+    console.log(`Input level: ${level} (type: ${typeof level})`);
+    
+    // レベルが数値でない場合や異常値の場合は1にリセット
+    if (typeof level !== 'number' || isNaN(level) || level < 1 || level > 100) {
+        console.error(`Invalid level detected: ${level}, resetting to 1`);
+        level = 1;
+        gameState.level = 1;
+    }
+    
+    // レベル1-10: 初心者向け
+    if (level <= 10) {
+        alienConfig.rows = Math.min(2 + Math.floor(level / 3), 3);
+        alienConfig.cols = Math.min(4 + Math.floor(level / 2), 8);
+        alienConfig.speed = 0.3 + (level - 1) * 0.1;
+        alienConfig.shootChance = 0.0001 + (level - 1) * 0.00005;
+        alienConfig.dropDistance = 12;
+        console.log(`Level ${level}: Beginner tier`);
+    }
+    // レベル11-30: 中級者向け
+    else if (level <= 30) {
+        alienConfig.rows = Math.min(3 + Math.floor((level - 10) / 5), 5);
+        alienConfig.cols = Math.min(6 + Math.floor((level - 10) / 3), 10);
+        alienConfig.speed = 1.0 + (level - 11) * 0.15;
+        alienConfig.shootChance = 0.0006 + (level - 11) * 0.00008;
+        alienConfig.dropDistance = 15;
+        console.log(`Level ${level}: Intermediate tier`);
+    }
+    // レベル31-60: 上級者向け
+    else if (level <= 60) {
+        alienConfig.rows = Math.min(4 + Math.floor((level - 30) / 6), 6);
+        alienConfig.cols = Math.min(8 + Math.floor((level - 30) / 4), 12);
+        alienConfig.speed = 4.0 + (level - 31) * 0.2;
+        alienConfig.shootChance = 0.002 + (level - 31) * 0.0001;
+        alienConfig.dropDistance = 18;
+        console.log(`Level ${level}: Advanced tier`);
+    }
+    // レベル61-100: エキスパート向け
+    else {
+        alienConfig.rows = Math.min(5 + Math.floor((level - 60) / 8), 8);
+        alienConfig.cols = Math.min(10 + Math.floor((level - 60) / 5), 15);
+        alienConfig.speed = 10.0 + (level - 61) * 0.3;
+        alienConfig.shootChance = 0.005 + (level - 61) * 0.00015;
+        alienConfig.dropDistance = 20;
+        console.log(`Level ${level}: Expert tier`);
+    }
+    
+    // 総エイリアン数を記録
+    gameState.totalAliensInLevel = alienConfig.rows * alienConfig.cols;
+    
+    console.log(`Final config - rows: ${alienConfig.rows}, cols: ${alienConfig.cols}, speed: ${alienConfig.speed}, total aliens: ${gameState.totalAliensInLevel}`);
 }
 
 // エイリアンを生成
@@ -241,7 +315,7 @@ function updateAliens(currentTime) {
     
     // ランダムでエイリアンが射撃
     for (let alien of aliens) {
-        if (alien.alive && Math.random() < 0.0005 && currentTime - alien.lastShot > 1000) {
+        if (alien.alive && Math.random() < alienConfig.shootChance && currentTime - alien.lastShot > 1000) {
             alienShoot(alien);
             alien.lastShot = currentTime;
         }
@@ -269,9 +343,15 @@ function checkCollisions() {
                 // エイリアンを倒す
                 alien.alive = false;
                 bullets.splice(i, 1);
+                gameState.aliensKilled++;
                 
                 // スコア加算（上の行ほど高得点）
-                gameState.score += (4 - alien.type) * 10 + 10;
+                const baseScore = (4 - alien.type) * 10 + 10;
+                const levelBonus = gameState.level * 5;
+                gameState.score += baseScore + levelBonus;
+                
+                // 経験値システムを完全削除
+                
                 updateUI();
                 break;
             }
@@ -311,13 +391,10 @@ function checkCollisions() {
     checkBarrierCollisions();
     
     // 全てのエイリアンを倒したかチェック
-    if (aliens.every(alien => !alien.alive)) {
-        // 新しいウェーブを開始
-        setTimeout(() => {
-            createAliens();
-            createBarriers(); // 防壁も復活
-            alienConfig.speed += 0.5; // 難易度を上げる
-        }, 1000);
+    if (aliens.every(alien => !alien.alive) && !gameState.levelCompleting) {
+        // レベルクリア（重複実行を防ぐ）
+        gameState.levelCompleting = true;
+        levelComplete();
     }
 }
 
@@ -462,7 +539,7 @@ function drawStars() {
     for (let i = 0; i < 50; i++) {
         const x = (i * 37) % canvas.width;
         const y = (i * 73) % canvas.height;
-        ctx.fillRect(x, y, 1, 1);
+            ctx.fillRect(x, y, 1, 1);
     }
 }
 
@@ -781,10 +858,193 @@ function drawParticles() {
     }
 }
 
+// レベルアップチェック（無効化）
+function checkLevelUp() {
+    // プレイヤーレベルアップシステムを無効化
+    // ゲームレベルのみを使用
+    console.log(`Player level up system disabled. Game Level: ${gameState.level}`);
+}
+
+// レベルクリア処理
+function levelComplete() {
+    // 重複実行チェック
+    if (gameState.levelCompleting !== true) {
+        console.log('Level complete called but not in completing state, ignoring');
+        return;
+    }
+    
+    console.log(`=== LEVEL COMPLETE START ===`);
+    console.log(`Current level before increment: ${gameState.level}`);
+    
+    // 現在のレベルを検証
+    if (typeof gameState.level !== 'number' || gameState.level < 1) {
+        console.error(`Invalid level detected: ${gameState.level}, forcing reset to 1`);
+        gameState.level = 1;
+        gameState.levelCompleting = false;
+        return;
+    }
+    
+    // 現在のレベルを保存
+    const currentLevel = gameState.level;
+    
+    // レベル100クリアでゲームクリア
+    if (currentLevel >= 100) {
+        console.log('Game completed - Level 100 cleared!');
+        gameComplete();
+        return;
+    }
+    
+    // レベルを確実に1つだけ増加
+    gameState.level = currentLevel + 1;
+    console.log(`Level incremented: ${currentLevel} → ${gameState.level}`);
+    
+    // レベルクリアボーナス
+    const timeBonus = Math.max(0, 30000 - (Date.now() - gameState.levelStartTime)) / 100;
+    const clearBonus = gameState.level * 100;
+    gameState.score += Math.floor(timeBonus + clearBonus);
+    
+    console.log(`Score bonus added: ${Math.floor(timeBonus + clearBonus)}, New score: ${gameState.score}`);
+    
+    console.log(`Score updated: ${gameState.score}`);
+    
+    // 次のレベルの準備
+    setTimeout(() => {
+        console.log(`=== PREPARING NEXT LEVEL ===`);
+        console.log(`Setting up level: ${gameState.level}`);
+        
+        // レベル完了フラグをリセット
+        gameState.levelCompleting = false;
+        gameState.aliensKilled = 0;
+        gameState.levelStartTime = Date.now();
+        
+        // 新しいレベルの設定
+        console.log(`Calling setLevelDifficulty with level: ${gameState.level}`);
+        setLevelDifficulty(gameState.level);
+        
+        console.log(`After setLevelDifficulty - rows: ${alienConfig.rows}, cols: ${alienConfig.cols}, speed: ${alienConfig.speed}`);
+        
+        createAliens();
+        
+        // 防壁を部分的に復活（高レベルでは復活率低下）
+        if (gameState.level <= 20 || Math.random() < 0.7) {
+            createBarriers();
+        }
+        
+        updateUI();
+        showLevelStartMessage();
+        
+        console.log(`=== LEVEL SETUP COMPLETE ===`);
+    }, 2000);
+}
+
+// ゲームクリア
+function gameComplete() {
+    gameState.gameRunning = false;
+    showGameCompleteScreen();
+}
+
+// レベルアップエフェクト
+function createLevelUpEffect() {
+    for (let i = 0; i < 20; i++) {
+        particles.push({
+            x: player.x + player.width / 2,
+            y: player.y + player.height / 2,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10,
+            life: 60,
+            maxLife: 60,
+            color: '#FFD700'
+        });
+    }
+}
+
+// レベル開始メッセージ
+function showLevelStartMessage() {
+    // レベル開始の視覚的フィードバック
+    createLevelStartEffect();
+}
+
+// レベル開始エフェクト
+function createLevelStartEffect() {
+    for (let i = 0; i < 15; i++) {
+        particles.push({
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8,
+            life: 45,
+            maxLife: 45,
+            color: '#00FF00'
+        });
+    }
+}
+
+// ゲームクリア画面
+function showGameCompleteScreen() {
+    // ゲームクリア用のUI表示
+    const gameCompleteDiv = document.createElement('div');
+    gameCompleteDiv.style.position = 'fixed';
+    gameCompleteDiv.style.top = '50%';
+    gameCompleteDiv.style.left = '50%';
+    gameCompleteDiv.style.transform = 'translate(-50%, -50%)';
+    gameCompleteDiv.style.background = 'rgba(0, 0, 0, 0.9)';
+    gameCompleteDiv.style.color = '#FFD700';
+    gameCompleteDiv.style.padding = '40px';
+    gameCompleteDiv.style.borderRadius = '15px';
+    gameCompleteDiv.style.textAlign = 'center';
+    gameCompleteDiv.style.border = '3px solid #FFD700';
+    gameCompleteDiv.innerHTML = `
+        <h1 style="font-size: 36px; margin-bottom: 20px;">🎉 GAME COMPLETE! 🎉</h1>
+        <p style="font-size: 24px; margin-bottom: 15px;">全100レベルクリア！</p>
+        <p style="font-size: 20px; margin-bottom: 15px;">Final Score: ${gameState.score}</p>
+        <p style="font-size: 16px; margin-bottom: 25px;">あなたは真の宇宙の勇者です！</p>
+        <button onclick="restartGame(); this.parentElement.remove();" 
+                style="background: #FFD700; color: #000; border: none; padding: 15px 30px; 
+                       font-size: 18px; border-radius: 8px; cursor: pointer;">
+            NEW GAME+
+        </button>
+    `;
+    document.body.appendChild(gameCompleteDiv);
+}
+
 // UI更新
 function updateUI() {
     scoreElement.textContent = gameState.score;
     livesElement.textContent = gameState.lives;
+    
+    // レベル情報を表示
+    const levelInfo = document.getElementById('levelInfo');
+    if (!levelInfo) {
+        const levelDiv = document.createElement('div');
+        levelDiv.id = 'levelInfo';
+        levelDiv.className = 'level-info';
+        levelDiv.style.cssText = `
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #00ff00;
+            font-size: 18px;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+            z-index: 100;
+        `;
+        document.querySelector('.game-container').appendChild(levelDiv);
+    }
+    
+    // レベル値の安全チェック
+    let displayLevel = gameState.level;
+    if (typeof displayLevel !== 'number' || displayLevel < 1 || displayLevel > 100) {
+        console.error(`Invalid level in UI: ${displayLevel}, using 1`);
+        displayLevel = 1;
+        gameState.level = 1; // 修正
+    }
+    
+    const progress = Math.min((gameState.aliensKilled / gameState.totalAliensInLevel) * 100, 100);
+    console.log(`UI Update - Displaying Level: ${displayLevel}`);
+    
+    document.getElementById('levelInfo').innerHTML = `
+        Level ${displayLevel}/100 | Progress: ${progress.toFixed(0)}% | Score: ${gameState.score}
+    `;
 }
 
 // ゲームオーバー
@@ -796,6 +1056,13 @@ function gameOver() {
 
 // ゲーム再開
 function restartGame() {
+    console.log('=== GAME RESTART ===');
+    // レベルを確実に1にリセット
+    gameState.level = 1;
+    gameState.score = 0;
+    gameState.lives = 3;
+    gameState.levelCompleting = false; // フラグもリセット
+    console.log(`Game state reset - Level: ${gameState.level}`);
     initGame();
 }
 
